@@ -56,10 +56,18 @@ echo "==> 重签 $INPUT"
   --ks-pass pass:emacs1 \
   --out "$OUT" "$INPUT"
 
-digest=$("${SIGNER_CMD[@]}" verify --print-certs "$OUT" |
-  sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+# apksigner --print-certs 的输出格式随 build-tools 版本变化：
+#   ≤36.1.0：Signer #1 certificate SHA-256 digest: <hex>
+#   37.0.0+：V2 Signer: certificate SHA-256 digest: <hex>（改成按签名方案分行列出）
+# 脚本按版本自动挑选本机最新的 build-tools，所以不能锚定 "Signer #1" 前缀，
+# 改为取第一条含 "SHA-256 digest" 的行；仍取不到时兜底取输出中第一个 64 位十六进制串。
+certs=$("${SIGNER_CMD[@]}" verify --print-certs "$OUT")
+digest=$(sed -n 's/^.*SHA-256 digest[^:]*:[[:space:]]*//p' <<<"$certs" | head -1)
+[[ -n $digest ]] || digest=$(grep -m1 -oE '[0-9a-fA-F]{64}' <<<"$certs" || true)
+digest=$(tr '[:upper:]' '[:lower:]' <<<"$digest")
 [[ $digest == "$EXPECTED_CERT_SHA256" ]] ||
-  die "签名证书指纹与预期不符: $digest"
+  die "签名证书指纹与预期不符: ${digest:-未解析到证书指纹}
+$(sed 's/^/    /' <<<"$certs")"
 echo "==> 签名完成，证书指纹校验通过: $digest"
 echo "apk=$OUT"
 [[ -n ${GITHUB_OUTPUT:-} ]] && echo "apk=$OUT" >>"$GITHUB_OUTPUT" || true

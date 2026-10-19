@@ -91,8 +91,16 @@ fork 的产物，如需）。
 apksigner verify --print-certs <重签后的 APK>
 ```
 
-输出的 `Signer #1 certificate SHA-256 digest` 必须等于第 1 步的指纹
+输出的 SHA-256 证书指纹必须等于第 1 步的指纹
 （仓库脚本会自动断言这一指纹，不符即失败）。
+
+注意 apksigner 的输出格式随 build-tools 版本变化，指纹所在的那一行名字不一样：
+
+- build-tools ≤ 36.1.0：`Signer #1 certificate SHA-256 digest: <指纹>`
+- build-tools ≥ 37.0.0：改成按签名方案分行列出，形如
+  `V2 Signer: certificate SHA-256 digest: <指纹>`（v3 签名的包则是 `V3.0 Signer:` 开头）
+
+所以比对时别直接匹配整行，认准 `SHA-256 digest` 关键字后面的 64 位十六进制串即可。
 
 ## 5. 安装顺序与升级规则
 
