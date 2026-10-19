@@ -30,7 +30,7 @@ Emacs 就能执行 Termux 内的程序（git 等）。机制详见 [docs/mechani
 | Termux:Widget  | `com.termux.widget` | termux/termux-widget | 自动重签                                                       |
 | Termux:GUI     | `com.termux.gui` | termux/termux-gui    | 自动重签（上游 2021 年停更，仅为完整性纳入）                       |
 | Termux:Float   | `com.termux.float` | termux/termux-float | 不处理——本机维护 fork [termux-float-modern](https://github.com/ShineBreaker/termux-float-modern)，自构建自签名 |
-| Termux:X11     | `com.termux.x11` | termux/termux-x11    | 不自动——release tag 固定为 `nightly`，无法按版本跳过；手动重签见 [docs/manual-resign.md](docs/manual-resign.md) |
+| Termux:X11     | `com.termux.x11` | termux/termux-x11    | 自动重签（`sharedUid` 变体；上游 tag 恒为 `nightly`，用资产 digest 前 12 位做版本键，如 `termux-x11-cd72ac672bc5`） |
 | Termux:AM      | —                | termux/TermuxAm      | 已废弃（Android 10+ 失效），不处理                                 |
 
 不建议使用的 `Termux:Float` / 已停更的 `Termux:GUI` 之外，其余插件装上后即可与

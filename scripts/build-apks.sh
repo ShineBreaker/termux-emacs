@@ -23,22 +23,26 @@ die() { echo "错误: $*" >&2; exit 1; }
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
-# 目标表：<仓库>|<资产名正则>|<额外 fetch 参数>
+# 目标表：<仓库>|<资产名正则>|<额外 fetch 参数>|<版本键模式>
+# 版本键模式 use-digest：上游 tag 恒定（nightly）时用资产 digest 前 12 位做版本键，
+# 否则用上游 tag。release tag = <仓库>-<版本键>。
 # - termux-float 不在表内：本机维护 fork（ShineBreaker/termux-float-modern），自构建自签名
-# - termux-x11 不在表内：其 release tag 固定为 nightly，无法按版本跳过；手动重签见 docs/manual-resign.md
 TARGETS=(
-  'termux-app|^termux-app_.+\+apt-android-7-.+_universal\.apk$|-P'
-  'termux-api|\.apk$|'
-  'termux-boot|\.apk$|'
-  'termux-styling|\.apk$|'
-  'termux-tasker|\.apk$|'
-  'termux-widget|\.apk$|'
-  'termux-gui|\.apk$|'
+  'termux-app|^termux-app_.+\+apt-android-7-.+_universal\.apk$|-P|tag'
+  'termux-api|\.apk$||tag'
+  'termux-boot|\.apk$||tag'
+  'termux-styling|\.apk$||tag'
+  'termux-tasker|\.apk$||tag'
+  'termux-widget|\.apk$||tag'
+  'termux-gui|\.apk$||tag'
+  # sharedUid 变体已声明 sharedUserId="com.termux"，正是要重签的那个
+  'termux-x11|universal-sharedUid.*\.apk$||digest'
 )
 
 PUBLISH=0
 FORCE=0
 ONLY=""
+STATUS=0
 DOWNLOAD=download
 OUT_DIR=dist
 
@@ -46,6 +50,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --publish) PUBLISH=1 ;;
     --force) FORCE=1 ;;
+    --status) STATUS=1 ;;
     --only) ONLY=$2; shift ;;
     --download) DOWNLOAD=$2; shift ;;
     --out) OUT_DIR=$2; shift ;;
@@ -56,6 +61,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$REPO_ROOT"
+
+if [[ $STATUS -eq 1 ]]; then
+  for entry in "${TARGETS[@]}"; do
+    IFS='|' read -r repo asset_pattern extra key_mode <<<"$entry"
+    probe=$(scripts/fetch-termux-apk.sh -r "$repo" -p "$asset_pattern" $extra -c 2>/dev/null)
+    tag=$(sed -n 's/^tag=//p' <<<"$probe")
+    digest=$(sed -n 's/^digest=//p' <<<"$probe")
+    if [[ $key_mode == digest ]]; then ver=${digest:0:12}; else ver=$tag; fi
+    printf '%-16s %-20s %s\n' "$repo" "$tag" "${ver:-(解析失败)}"
+  done
+  exit 0
+fi
 
 if [[ $PUBLISH -eq 1 ]]; then
   command -v gh >/dev/null || die "需要 gh（GitHub CLI）才能发布 release"
@@ -82,8 +99,7 @@ mkdir -p "$DOWNLOAD" "$OUT_DIR"
 
 # 发布产物为本仓库 release；tag 形如 <仓库>-<上游 tag>
 publish_release() {
-  local repo=$1 tag=$2 apk=$3 upstream_asset=$4
-  local rel_tag="${repo}-${tag}"
+  local repo=$1 tag=$2 apk=$3 upstream_asset=$4 rel_tag=$5
   if gh release view "$rel_tag" >/dev/null 2>&1; then
     if [[ $FORCE -eq 1 ]]; then
       echo "==> release $rel_tag 已存在，--force：删除重建"
@@ -112,7 +128,7 @@ publish_release() {
 
 failures=0
 for entry in "${TARGETS[@]}"; do
-  IFS='|' read -r repo asset_pattern extra <<<"$entry"
+  IFS='|' read -r repo asset_pattern extra key_mode <<<"$entry"
 
   if [[ -n $ONLY ]]; then
     case ",$ONLY," in
@@ -128,7 +144,16 @@ for entry in "${TARGETS[@]}"; do
   probe=$(scripts/fetch-termux-apk.sh -r "$repo" -p "$asset_pattern" $extra -o "$DOWNLOAD" -c)
   tag=$(sed -n 's/^tag=//p' <<<"$probe")
   asset=$(sed -n 's/^asset=//p' <<<"$probe")
-  rel_tag="${repo}-${tag}"
+  digest=$(sed -n 's/^digest=//p' <<<"$probe")
+
+  # 版本键：固定 tag 的上游（nightly）用内容 digest，否则用 tag
+  if [[ $key_mode == digest ]]; then
+    [[ -n $digest ]] || die "$repo 需要 digest 做版本键，但上游 API 未返回 digest"
+    ver=${digest:0:12}
+  else
+    ver=$tag
+  fi
+  rel_tag="${repo}-${ver}"
 
   # publish 且未 --force：该版本已发布则跳过（连下载都省）
   if [[ $PUBLISH -eq 1 && $FORCE -eq 0 ]] && gh release view "$rel_tag" >/dev/null 2>&1; then
@@ -154,7 +179,7 @@ for entry in "${TARGETS[@]}"; do
 
   # 发布
   if [[ $PUBLISH -eq 1 ]]; then
-    publish_release "$repo" "$tag" "$out_apk" "$asset"
+    publish_release "$repo" "$tag" "$out_apk" "$asset" "$rel_tag"
   fi
 done
 

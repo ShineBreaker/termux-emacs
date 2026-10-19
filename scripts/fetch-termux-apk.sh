@@ -89,9 +89,16 @@ fi
 ASSET=${matches[0]}
 APK_URL=$(jq -r --arg n "$ASSET" '.assets[] | select(.name == $n) | .browser_download_url' <<<"$release_json")
 
+# 资产内容摘要（GitHub API 的 digest 字段）；固定 tag 的上游（nightly）用它做版本键
+asset_digest() {
+  jq -r --arg n "$ASSET" '.assets[] | select(.name == $n) | .digest // ""' <<<"$release_json" |
+    sed 's/^sha256://'
+}
+
 if [[ $CHECK_ONLY -eq 1 ]]; then
   write_output tag "$TAG"
   write_output asset "$ASSET"
+  write_output digest "$(asset_digest)"
   echo "check-only：$REPO $TAG（$ASSET），未下载" >&2
   exit 0
 fi
@@ -117,7 +124,13 @@ while IFS= read -r sums; do
 done < <(jq -r '.assets[] | select(.name | test("_sha256sums$|^sha256sums$|^checksums-sha256\\.txt$")) | .name' <<<"$release_json")
 
 if [[ -z $expected ]]; then
-  echo "警告: release $TAG 中没有 $ASSET 的 checksums 条目，跳过校验" >&2
+  # 无 checksums 资产时（如 termux-x11）用 API 提供的 digest 兜底校验
+  expected=$(asset_digest)
+  if [[ -n $expected ]]; then
+    echo "release $TAG 无 checksums 资产，改用 API digest 校验" >&2
+  else
+    echo "警告: release $TAG 无 checksums 与 digest，跳过校验" >&2
+  fi
 fi
 
 # 幂等：本地已有同名文件且 sha256 匹配则跳过下载
@@ -139,4 +152,5 @@ fi
 
 write_output tag "$TAG"
 write_output asset "$ASSET"
+write_output digest "$(asset_digest)"
 write_output apk "$APK_PATH"

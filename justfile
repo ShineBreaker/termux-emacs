@@ -2,7 +2,8 @@
 # 日常使用直接到 Releases 下载 *-emacs-signed.apk，无需在本地执行以下命令。
 # 目标表与机制见 README.md 与 docs/。
 
-default: @just --list
+default:
+    @just --list
 
 # ═══ 批量 ═══
 
@@ -14,14 +15,9 @@ all:
 only repos:
     scripts/build-apks.sh --only {{repos}}
 
-# 探测各目标当前上游版本，不下载不重签
+# 探测各目标当前上游版本与版本键，不下载不重签
 status:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for repo in termux-app termux-api termux-boot termux-styling termux-tasker termux-widget termux-gui; do
-        printf '%-16s ' "$repo"
-        scripts/fetch-termux-apk.sh -r "$repo" -c 2>/dev/null | sed -n 's/^tag=//p'
-    done
+    scripts/build-apks.sh --status
 
 # ═══ 单个 ═══
 

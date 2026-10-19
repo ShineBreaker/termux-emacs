@@ -55,9 +55,12 @@ curl -fLO https://raw.githubusercontent.com/emacs-mirror/emacs/master/java/emacs
 johanwiden 实测记录：F-Droid 版 `0.119.0-beta.3 (1022)`（2025-05-29 上架）重签后在
 Android 15 的 OnePlus Open 与 Samsung Tab S8+ 上可用。
 
-**Termux:X11**（未纳入自动化）：到 [termux/termux-x11 releases](https://github.com/termux/termux-x11/releases)
-下载 `termux-x11-universal-sharedUid-debug.apk`（nightly tag，内容随上游滚动更新），
-重签命令同下。
+**Termux:X11**（已纳入自动化）：上游 release 只有一个 `nightly` tag，内容随时更新，
+因此用资产 digest 前 12 位做版本键（release tag 形如 `termux-x11-cd72ac672bc5`），
+内容不变则自动跳过。要重签的是 **`termux-x11-universal-sharedUid-debug.apk`**——
+只有它声明了 `sharedUserId="com.termux"`；另一个 `termux-x11-universal-debug.apk`
+不共享 UID，重签它没有意义。该 release 没有 checksums 资产，脚本用 GitHub API 的
+digest 字段兜底校验。
 
 ## 3. 重签
 
