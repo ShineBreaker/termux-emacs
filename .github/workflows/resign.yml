@@ -1,0 +1,57 @@
+# 批量重签 termux 系 APK（主程序 + 官方插件），发布为本仓库的 GitHub Release。
+# 原理、目标表与本地用法见 README.md 与 docs/。
+#
+# 触发:
+#   - workflow_dispatch: 手动触发，可限定目标仓库、可强制重建同名 release
+#   - schedule: 每周检查一次上游新版本，已发布过的版本直接跳过（连下载都省）
+#
+# 无需配置任何 Secrets：签名密钥是 Emacs 官方公开的（assets/emacs.keystore），
+# 发布使用内置 GITHUB_TOKEN。
+
+name: Resign Termux APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "只处理指定仓库（逗号分隔，如 termux-api,termux-widget；留空=全部）"
+        required: false
+        default: ""
+      force:
+        description: "目标 release 已存在时强制删除重建"
+        type: boolean
+        required: false
+        default: false
+  schedule:
+    # 每周日 UTC 18:30（北京时间周一 02:30）检查；上游预览版更新不快，无需每天跑。
+    # 已发布过的版本直接跳过（先解析版本、已发布就不下载）。无需自动时删除这两行
+    - cron: "30 18 * * 0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: resign-apks
+  cancel-in-progress: false
+
+jobs:
+  resign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: 安装 build-tools（apksigner）
+        run: |
+          yes | sdkmanager --install "build-tools;34.0.0" >/dev/null
+          echo "$ANDROID_HOME/build-tools/34.0.0" >> "$GITHUB_PATH"
+
+      - name: 批量重签并发布
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          args=(--publish)
+          if [[ "${{ inputs.force }}" == "true" ]]; then args+=(--force); fi
+          if [[ -n "${{ inputs.only }}" ]]; then args+=(--only "${{ inputs.only }}"); fi
+          scripts/build-apks.sh "${args[@]}"

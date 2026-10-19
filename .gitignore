@@ -1,0 +1,5 @@
+# 下载的上游 APK 与重签产物（本地构建目录）
+download/
+dist/
+tools/
+*.idsig
