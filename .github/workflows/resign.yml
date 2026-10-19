@@ -41,11 +41,22 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: android-actions/setup-android@v3
+        with:
+          # setup-android 的默认 packages 是 "tools platform-tools"，其中 "tools" 是
+          # Google 已从 SDK 仓库下线的旧 SDK Tools 包。装它会直接失败：
+          #   Warning: Failed to find package 'tools'   → sdkmanager exit 1
+          # 所以这里显式指定实际需要的包：platform-tools + 提供 apksigner 的 build-tools。
+          # action 在 Linux 上把包名原样作为 argv 传给 sdkmanager（不过 shell），
+          # 因此 "build-tools;34.0.0" 里的分号不会被拆成两条命令。
+          packages: platform-tools build-tools;34.0.0
 
-      - name: 安装 build-tools（apksigner）
+      - name: 校验 apksigner 可用
         run: |
-          yes | sdkmanager --install "build-tools;34.0.0" >/dev/null
-          echo "$ANDROID_HOME/build-tools/34.0.0" >> "$GITHUB_PATH"
+          jar=$(ls -d "$ANDROID_HOME"/build-tools/*/lib/apksigner.jar | sort -V | tail -1)
+          echo "apksigner: $jar"
+          java -jar "$jar" version
+          # 把 build-tools 加入 PATH，便于直接调用 apksigner 命令
+          for d in "$ANDROID_HOME"/build-tools/*/; do echo "${d%/}" >>"$GITHUB_PATH"; done
 
       - name: 批量重签并发布
         env:
